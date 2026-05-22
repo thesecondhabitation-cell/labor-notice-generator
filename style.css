@@ -1,0 +1,502 @@
+/* 画面用 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+  background: #e8ecef;
+  color: #222;
+  line-height: 1.6;
+}
+
+code {
+  font-size: 0.85em;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.app-header {
+  background: #2c5282;
+  color: #fff;
+  padding: 1rem 1.5rem;
+}
+
+.app-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.35rem;
+}
+
+.app-note {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.app-note a {
+  color: #bee3f8;
+}
+
+.checkbox-inline {
+  display: block;
+  font-weight: normal;
+  font-size: 0.88rem;
+  margin-bottom: 0.5rem;
+}
+
+.checkbox-inline input {
+  margin-right: 0.35rem;
+}
+
+.fixed-ot-form {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: #f7fafc;
+  border-radius: 4px;
+}
+
+.app-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.form-panel {
+  flex: 1 1 340px;
+  max-width: 440px;
+  background: #fff;
+  padding: 1.25rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.preview-panel {
+  flex: 2 1 560px;
+  min-width: 0;
+}
+
+.form-panel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  border-bottom: 2px solid #2c5282;
+  padding-bottom: 0.5rem;
+}
+
+.form-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.form-section legend {
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 0 0.25rem;
+}
+
+.form-group {
+  margin-bottom: 0.75rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-row .form-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.label-text {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 0.3rem;
+}
+
+.radio-inline {
+  display: inline-block;
+  font-weight: normal;
+  margin-right: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  font-size: 0.92rem;
+  font-family: inherit;
+}
+
+.form-note {
+  font-size: 0.8rem;
+  color: #555;
+  margin: 0 0 0.5rem;
+}
+
+.allowance-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.allowance-row {
+  display: grid;
+  grid-template-columns: 1fr 0.9fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.allowance-row input {
+  min-width: 0;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  color: #2c5282;
+  background: #ebf4ff;
+  border: 1px solid #90cdf4;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #bee3f8;
+}
+
+.remove-allowance-btn {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: #c53030;
+  background: #fff;
+  border: 1px solid #feb2b2;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.remove-allowance-btn:hover {
+  background: #fff5f5;
+}
+
+.allowance-preview-list:empty,
+#fixed-ot-preview:empty {
+  display: none;
+}
+
+.print-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #fff;
+  background: #2c5282;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.print-btn:hover {
+  background: #1a365d;
+}
+
+/* ===== 通知書（Word原本準拠） ===== */
+.notice-document {
+  background: #fff;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 20mm 19mm 18mm;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  font-family: "MS Mincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  color: #000;
+}
+
+.notice-title {
+  text-align: center;
+  font-size: 12pt;
+  font-weight: bold;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.02em;
+}
+
+.notice-legal {
+  font-size: 9.5pt;
+  margin: 0 0 0.8rem;
+  text-indent: 1em;
+}
+
+.notice-addressee {
+  margin: 0 0 0.6rem;
+  font-size: 11pt;
+}
+
+/* 表：左列約14%（Word tblGrid 1441/10050） */
+.notice-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin-bottom: 0.6rem;
+}
+
+.notice-table th,
+.notice-table td {
+  border: 1px solid #000;
+  padding: 0.35rem 0.45rem;
+  vertical-align: top;
+}
+
+.cell-label {
+  width: 14.3%;
+  text-align: center;
+  font-weight: normal;
+  white-space: pre-wrap;
+}
+
+.cell-body p {
+  margin: 0 0 0.15rem;
+}
+
+.cell-body p:last-child {
+  margin-bottom: 0;
+}
+
+.cell-contract .indent,
+.indent {
+  text-indent: 1em;
+  padding-left: 0.5em;
+}
+
+.indent-dot {
+  padding-left: 1.5em;
+}
+
+.small {
+  font-size: 9.5pt;
+}
+
+.bullet {
+  padding-left: 0.3em;
+}
+
+.cell-wage p {
+  margin-bottom: 0.2rem;
+}
+
+.wage-line {
+  padding-left: 0.2em;
+}
+
+.ph-multiline,
+.cell-body .ph {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wage-sub {
+  font-size: 9.5pt;
+  margin: 0 0 0.2rem;
+  padding-left: 1em;
+}
+
+.agreement-section {
+  margin-top: 1.2rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #000;
+}
+
+.agreement-heading {
+  font-size: 11pt;
+  text-align: center;
+  margin: 0 0 0.5rem;
+}
+
+.agreement-lead {
+  text-align: center;
+  margin: 0 0 0.8rem;
+}
+
+.agreement-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.agreement-party {
+  text-align: center;
+}
+
+.party-title {
+  font-weight: bold;
+  margin: 0 0 0.4rem;
+}
+
+.signatory-label {
+  text-align: right;
+  font-size: 9.5pt;
+  margin: 0 0 0.2rem;
+}
+
+.notice-endmatter {
+  margin-top: 0.5rem;
+}
+
+.notice-note {
+  margin: 0.5rem 0 1.5rem;
+  font-size: 10pt;
+}
+
+.notice-date-line,
+.notice-employer-line {
+  text-align: right;
+  margin: 0.2rem 0;
+  white-space: pre-wrap;
+}
+
+.notice-signatory {
+  text-align: right;
+  margin: 0.8rem 0 0;
+  padding-right: 1em;
+}
+
+.signatory-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.35rem;
+}
+
+.signatory-cell {
+  display: inline-block;
+  min-width: 14em;
+  padding: 0.15rem 0.5rem 0.2rem;
+  border-bottom: 1px solid #000;
+  text-align: center;
+  min-height: 1.4em;
+}
+
+.ph-intro.is-empty {
+  color: #888;
+}
+
+/* 画面プレビュー：フッター見本 */
+.preview-panel > .document-print-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 210mm;
+  margin: 0.8rem auto 0;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid #999;
+  font-size: 9pt;
+  color: #444;
+}
+
+.print-footer-pages::after {
+  content: "（印刷時に 1 / 総ページ）";
+  font-size: 8.5pt;
+  color: #666;
+}
+
+/* 印刷・PDF */
+@media print {
+  @page {
+    size: A4 portrait;
+    /* 下余白を広めに取り、固定フッターと本文が重ならないようにする */
+    margin: 18mm 19mm 32mm;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .app-layout {
+    display: block;
+    padding: 0;
+  }
+
+  .preview-panel {
+    position: relative;
+  }
+
+  .notice-document {
+    width: 100%;
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .ph-intro.is-empty {
+    color: #000;
+  }
+
+  /*
+   * 日付・署名・合意欄はまとめて改ページ調整。
+   * 1ページ目の下端に収まらない場合はまとめて次ページへ送る。
+   */
+  .notice-endmatter {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+    margin-bottom: 0;
+    padding-bottom: 4mm;
+  }
+
+  /* 各ページの下端に固定（改ページごとに繰り返し） */
+  .document-print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    height: 14mm;
+    padding: 0 19mm;
+    box-sizing: border-box;
+    border-top: 0.5pt solid #000;
+    background: #fff;
+    font-family: "MS Mincho", "Yu Mincho", serif;
+    font-size: 9pt;
+    color: #000;
+  }
+
+  .print-footer-pages::after {
+    content: counter(page) " / " counter(pages);
+    font-size: 9pt;
+    color: #000;
+  }
+}
