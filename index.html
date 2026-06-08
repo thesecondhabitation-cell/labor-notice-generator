@@ -4,24 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>労働条件通知書ジェネレーター</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header no-print">
-    <h1>労働条件通知書ジェネレーター</h1>
-    <p class="app-note">
-      労働基準法第15条に基づく労働条件の明示用です。実務では
-      <strong>労働条件通知書兼労働契約書</strong>として運用されることが多いため、合意欄も用意しています。
-    </p>
-    <p class="app-note app-link">
-      参考：<a href="https://www.mhlw.go.jp/stf/newpage_32105.html" target="_blank" rel="noopener">厚生労働省 労働条件通知書モデル様式</a>
-      （労働基準法15条・施行規則5条・パートタイム・有期雇用労働法6条）
-    </p>
+    <div class="app-header__inner">
+      <p class="app-eyebrow">Labor Conditions Notice</p>
+      <h1 class="app-title">労働条件通知書ジェネレーター</h1>
+      <p class="app-lead">
+        労働基準法第15条に基づく労働条件の明示用ツール。実務では
+        <strong>労働条件通知書兼労働契約書</strong>として運用されることが多いため、合意欄も用意しています。
+      </p>
+      <p class="app-reference">
+        参考：<a href="https://www.mhlw.go.jp/stf/newpage_32105.html" target="_blank" rel="noopener">厚生労働省 労働条件通知書モデル様式</a>
+      </p>
+    </div>
   </header>
 
   <main class="app-layout">
     <section class="form-panel no-print" aria-label="入力フォーム">
-      <h2>入力フォーム</h2>
+      <header class="panel-header">
+        <h2 class="panel-title">Input</h2>
+        <p class="panel-subtitle">入力フォーム</p>
+      </header>
 
       <form id="input-form" autocomplete="off">
         <fieldset class="form-section">
@@ -35,7 +43,7 @@
         <fieldset class="form-section">
           <legend>当事者</legend>
           <div class="form-group">
-            <label for="employer-name"><code>{{使用者名称}}</code></label>
+            <label for="employer-name">会社名</label>
             <input type="text" id="employer-name" placeholder="例：株式会社〇〇">
           </div>
           <div class="form-group">
@@ -67,6 +75,24 @@
             <label for="indefinite-conditions"><code>{{無期転換後条件}}</code></label>
             <input type="text" id="indefinite-conditions" placeholder="転換後の労働条件">
           </div>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="use-probation">
+            試用期間を設ける
+          </label>
+          <div id="probation-form" class="fixed-ot-form" hidden>
+            <div class="form-group">
+              <label for="probation-period"><code>{{試用期間}}</code></label>
+              <input type="text" id="probation-period" value="入社日から3か月間" placeholder="例：2026年4月1日〜2026年6月30日">
+            </div>
+            <div class="form-group">
+              <label for="probation-conditions"><code>{{試用期間中の労働条件}}</code></label>
+              <input type="text" id="probation-conditions" value="本通知書に記載の労働条件と同一とする。">
+            </div>
+            <div class="form-group">
+              <label for="probation-dismissal"><code>{{本採用判断基準}}</code></label>
+              <input type="text" id="probation-dismissal" value="試用期間中又は試用期間満了時に、勤務成績、業務遂行能力、勤務態度、健康状態その他従業員としての適格性を総合的に勘案し、本採用の可否を判断する。" placeholder="就業規則に定める場合は「試用期間中の解雇その他の取扱いは就業規則による」など">
+            </div>
+          </div>
         </fieldset>
 
         <fieldset class="form-section">
@@ -91,6 +117,11 @@
 
         <fieldset class="form-section">
           <legend>3. 就業時間・休日・休暇（必須明示）</legend>
+          <div class="form-group">
+            <label for="work-hours-system"><code>{{労働時間制度}}</code></label>
+            <input type="text" id="work-hours-system" placeholder="例：裁量労働制を適用／一年単位の変形労働時間制を適用（対象期間：4月〜翌3月）">
+            <p class="form-hint">就業の時間の1行目に表示します。未入力時は行ごと非表示</p>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label for="work-start-time"><code>{{始業時刻}}</code></label>
@@ -102,9 +133,27 @@
             </div>
           </div>
           <div class="form-group">
-            <label for="break-minutes">休憩（分）</label>
-            <input type="text" id="break-minutes" placeholder="60">
-            <input type="hidden" id="break-display">
+            <span class="label-text">休憩の記載</span>
+            <label class="radio-inline">
+              <input type="radio" name="break-mode" value="minutes" checked> 時間（分）
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="break-mode" value="range"> 時刻（何時〜何時）
+            </label>
+          </div>
+          <div id="break-minutes-form" class="form-group">
+            <label for="break-minutes">休憩</label>
+            <input type="text" id="break-minutes" placeholder="例：60分">
+          </div>
+          <div id="break-range-form" class="form-row" hidden>
+            <div class="form-group">
+              <label for="break-start-time">休憩開始</label>
+              <input type="text" id="break-start-time" placeholder="12:00">
+            </div>
+            <div class="form-group">
+              <label for="break-end-time">休憩終了</label>
+              <input type="text" id="break-end-time" placeholder="13:00">
+            </div>
           </div>
           <div class="form-group">
             <label for="scheduled-hours"><code>{{所定労働時間}}</code></label>
@@ -130,6 +179,11 @@
 
         <fieldset class="form-section">
           <legend>4. 賃金（決定・計算・支払／固定残業代）</legend>
+          <div class="form-group form-computed">
+            <span class="label-text"><code>{{月給支給総額}}</code>（円）</span>
+            <p id="monthly-gross-display" class="computed-value" aria-live="polite">—</p>
+            <p class="form-hint">基本給・固定残業代・手当の合計（自動計算）</p>
+          </div>
           <div class="form-group">
             <label for="base-salary"><code>{{基本給}}</code>（月額・円）</label>
             <input type="text" id="base-salary" placeholder="240000">
@@ -166,6 +220,23 @@
           <div class="form-group">
             <label for="salary-increase"><code>{{昇給}}</code></label>
             <input type="text" id="salary-increase" placeholder="例：年1回、人事考課に基づく">
+          </div>
+          <div class="form-group">
+            <label for="bonus-policy"><code>{{賞与}}</code></label>
+            <input type="text" id="bonus-policy" placeholder="例：年2回、会社業績および人事考課に基づく">
+          </div>
+          <div class="form-group">
+            <label for="commute-expense-desc">交通費（支給の内容）</label>
+            <input type="text" id="commute-expense-desc" value="必要に応じて実費支給" placeholder="例：必要に応じて実費支給 / 必要の範囲内とする">
+          </div>
+          <div class="form-group">
+            <label for="commute-expense-limit">交通費の上限（円）</label>
+            <input type="text" id="commute-expense-limit" value="15000" placeholder="15000">
+            <p class="form-hint">上限を空欄にすると、支給内容のみ表示します（未入力時は15,000円）</p>
+          </div>
+          <div class="form-group">
+            <label for="wage-cutoff-day"><code>{{賃金締切日}}</code></label>
+            <input type="text" id="wage-cutoff-day" value="毎月末日" placeholder="毎月末日">
           </div>
           <div class="form-group">
             <label for="payday"><code>{{賃金支払日}}</code>（翌月○日）</label>
@@ -209,7 +280,7 @@
           <legend>その他・特記</legend>
           <div class="form-group">
             <label for="other-disclosure"><code>{{その他明示事項}}</code></label>
-            <textarea id="other-disclosure" rows="3" placeholder="退職手当・賞与・安全衛生・試用期間・副業可否など（書面外明示もここにまとめ可）"></textarea>
+            <textarea id="other-disclosure" rows="3" placeholder="退職手当・賞与・安全衛生・副業可否など（書面外明示もここにまとめ可）"></textarea>
           </div>
           <div class="form-group">
             <label for="special-notes"><code>{{特記事項}}</code></label>
@@ -219,37 +290,54 @@
 
         <fieldset class="form-section">
           <legend>フッター・合意</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="document-year"><code>{{作成年}}</code></label>
+              <input type="text" id="document-year" placeholder="2026">
+            </div>
+            <div class="form-group">
+              <label for="document-month"><code>{{作成月}}</code></label>
+              <input type="text" id="document-month" placeholder="6">
+            </div>
+            <div class="form-group">
+              <label for="document-day"><code>{{作成日}}</code></label>
+              <input type="text" id="document-day" placeholder="5">
+            </div>
+          </div>
           <div class="form-group">
             <label for="employer-address"><code>{{事業所名称所在地}}</code></label>
             <textarea id="employer-address" rows="2"></textarea>
           </div>
           <div class="form-group">
-            <label for="representative-title"><code>{{肩書}}</code>（使用者）</label>
-            <input type="text" id="representative-title" placeholder="代表取締役">
-          </div>
-          <div class="form-group">
-            <label for="representative-name"><code>{{名前}}</code>（使用者）</label>
+            <label for="representative-name"><code>{{名前}}</code>（代表者）</label>
             <input type="text" id="representative-name" placeholder="氏名">
-          </div>
-          <div class="form-group">
-            <label for="worker-agreement-name"><code>{{労働者合意氏名}}</code></label>
-            <input type="text" id="worker-agreement-name" placeholder="合意欄に印字する労働者氏名">
           </div>
         </fieldset>
       </form>
 
-      <button type="button" id="print-btn" class="print-btn">印刷 / PDF保存</button>
+      <div class="draft-toolbar no-print" aria-label="下書きの保存">
+        <p id="draft-status" class="draft-status" role="status">入力内容は自動でこのブラウザに保存されます</p>
+        <div class="draft-actions">
+          <button type="button" id="export-draft-btn" class="btn-secondary">ファイルに保存</button>
+          <button type="button" id="import-draft-btn" class="btn-secondary">ファイルから読み込み</button>
+          <input type="file" id="import-draft-file" accept=".json,application/json" hidden>
+          <button type="button" id="clear-draft-btn" class="btn-secondary btn-danger">保存データを消去</button>
+        </div>
+      </div>
+
+      <div class="export-actions no-print">
+        <button type="button" id="export-word-btn" class="btn-secondary">Wordで書き出し</button>
+        <button type="button" id="print-btn" class="print-btn">印刷 / PDF保存</button>
+      </div>
     </section>
 
     <section class="preview-panel" aria-label="労働条件通知書">
+      <header class="panel-header panel-header--preview no-print">
+        <h2 class="panel-title">Preview</h2>
+        <p class="panel-subtitle">通知書プレビュー</p>
+      </header>
       <article id="notice-document" class="notice-document">
         <h1 class="notice-title" id="notice-title">労働条件通知書兼労働契約書</h1>
-        <p class="notice-legal" id="notice-legal-intro">
-          使用者 <span class="ph" data-ph="使用者名称">{{使用者名称}}</span> は、労働基準法第15条に基づき、
-          労働者 <span class="ph ph-intro" data-ph="労働者氏名" data-intro-label="氏名">{{労働者氏名}}</span> に対し、
-          以下のとおり労働条件を明示する。
-          <span id="notice-legal-combined">本書面は双方の合意による労働契約書を兼ねる。</span>
-        </p>
 
         <p class="notice-addressee">
           <span class="ph ph-intro" data-ph="労働者氏名" data-intro-label="氏名">{{労働者氏名}}</span>殿
@@ -260,18 +348,29 @@
             <tr>
               <th class="cell-label" scope="row">契約期間</th>
               <td class="cell-body cell-contract">
-                <p>１　契約の更新の有無</p>
+                <p class="contract-fixed-only" hidden>１　契約の更新の有無</p>
                 <p class="indent" id="contract-type-line">
-                  <span id="mark-none">■</span>期間の定めなし　<span id="mark-fixed">□</span>期間の定めあり
-                  （<span class="ph" data-ph="契約期間">{{契約期間}}</span>）
+                  <span id="mark-none">■</span>期間の定めなし　<span id="mark-fixed">□</span>期間の定めあり<span class="contract-fixed-only" hidden>（<span class="ph" data-ph="契約期間">{{契約期間}}</span>）</span>
                 </p>
-                <p>２　契約の更新は次により判断する</p>
-                <p class="indent">・契約期間満了時の業務量　・勤務成績、態度　・能力</p>
-                <p class="indent">・会社の経営状況　・従事している業務の進捗状況</p>
-                <p>３　更新に変更がある場合は３ヶ月前に通知（継続更新時は特に通知しない）</p>
-                <p class="contract-2024-only indent" hidden>４　更新上限：<span class="ph" data-ph="更新上限">{{更新上限}}</span></p>
-                <p class="contract-2024-only indent" hidden>５　無期転換の申込み：<span class="ph" data-ph="無期転換申込">{{無期転換申込}}</span></p>
-                <p class="contract-2024-only indent" hidden>６　無期転換後の労働条件：<span class="ph" data-ph="無期転換後条件">{{無期転換後条件}}</span></p>
+                <p class="contract-fixed-only" hidden>２　契約の更新は次により判断する</p>
+                <p class="contract-fixed-only indent" hidden>・契約期間満了時の業務量　・勤務成績、態度　・能力</p>
+                <p class="contract-fixed-only indent" hidden>・会社の経営状況　・従事している業務の進捗状況</p>
+                <p class="contract-fixed-only" hidden>３　更新に変更がある場合は３ヶ月前に通知（継続更新時は特に通知しない）</p>
+                <p class="contract-fixed-only indent" hidden>４　更新上限：<span class="ph" data-ph="更新上限">{{更新上限}}</span></p>
+                <p class="contract-fixed-only indent" hidden>５　無期転換の申込み：<span class="ph" data-ph="無期転換申込">{{無期転換申込}}</span></p>
+                <p class="contract-fixed-only indent" hidden>６　無期転換後の労働条件：<span class="ph" data-ph="無期転換後条件">{{無期転換後条件}}</span></p>
+              </td>
+            </tr>
+            <tr class="probation-only" hidden>
+              <th class="cell-label" scope="row">試用期間</th>
+              <td class="cell-body cell-probation">
+                <p>１　試用期間の定め</p>
+                <p class="indent">■ 試用期間の定めあり
+                  （<span class="ph" data-ph="試用期間">{{試用期間}}</span>）</p>
+                <p>２　試用期間中の労働条件</p>
+                <p class="indent"><span class="ph" data-ph="試用期間中の労働条件">{{試用期間中の労働条件}}</span></p>
+                <p>３　本採用判断基準</p>
+                <p class="indent"><span class="ph" data-ph="本採用判断基準">{{本採用判断基準}}</span></p>
               </td>
             </tr>
             <tr>
@@ -291,6 +390,9 @@
             <tr>
               <th class="cell-label" scope="row">就業の時間</th>
               <td class="cell-body">
+                <p id="work-hours-system-line" class="work-hours-system-line" hidden>
+                  <span class="ph ph-multiline" data-ph="労働時間制度">{{労働時間制度}}</span>
+                </p>
                 <p>始業 <span class="ph" data-ph="始業時刻">{{始業時刻}}</span>　終業 <span class="ph" data-ph="終業時刻">{{終業時刻}}</span></p>
                 <p>休憩 <span class="ph" data-ph="休憩時間">{{休憩時間}}</span></p>
                 <p>所定労働時間：<span class="ph" data-ph="所定労働時間">{{所定労働時間}}</span></p>
@@ -308,13 +410,15 @@
             <tr>
               <th class="cell-label" scope="row">賃　　　金</th>
               <td class="cell-body cell-wage">
+                <p class="wage-line wage-total">・月給支給総額：<span class="ph" data-ph="月給支給総額">{{月給支給総額}}</span>円</p>
                 <p class="wage-line">・基本給（月額）：<span class="ph" data-ph="基本給">{{基本給}}</span>円</p>
                 <div id="fixed-ot-preview" hidden></div>
                 <div id="allowance-preview-list" class="allowance-preview-list"></div>
                 <p>・賃金の決定・計算・支払：<span class="ph ph-multiline" data-ph="賃金決定計算支払">{{賃金決定計算支払}}</span></p>
                 <p>・昇給：<span class="ph" data-ph="昇給">{{昇給}}</span></p>
-                <p>２　交通費　必要に応じて実費支給（上限15,000円）</p>
-                <p>３　賃金締切日　毎月末日</p>
+                <p>・賞与：<span class="ph" data-ph="賞与">{{賞与}}</span></p>
+                <p>２　交通費　<span class="ph" data-ph="交通費">{{交通費}}</span></p>
+                <p>３　賃金締切日　<span class="ph" data-ph="賃金締切日">{{賃金締切日}}</span></p>
                 <p>４　賃金支払日　翌月<span class="ph" data-ph="賃金支払日">{{賃金支払日}}</span>日</p>
               </td>
             </tr>
@@ -355,29 +459,28 @@
             　　　　　　　　　　　　　　　<span class="ph" data-ph="作成年">{{作成年}}</span>年<span class="ph" data-ph="作成月">{{作成月}}</span>月<span class="ph" data-ph="作成日">{{作成日}}</span>日
           </p>
           <p class="notice-employer-line">
-            事業所名称・所在地　<span class="ph" data-ph="事業所名称所在地">{{事業所名称所在地}}</span>
+            <span class="ph" data-ph="事業所名称所在地">{{事業所名称所在地}}</span>
           </p>
 
           <div class="notice-signatory">
-            <p class="signatory-label">【使用者】</p>
-            <div class="signatory-row"><span class="signatory-cell ph" data-ph="肩書">{{肩書}}</span></div>
-            <div class="signatory-row"><span class="signatory-cell ph" data-ph="名前">{{名前}}</span></div>
+            <p class="notice-signatory-name"><span class="ph" data-ph="名前">{{名前}}</span></p>
           </div>
 
           <section id="agreement-section" class="agreement-section">
-            <h2 class="agreement-heading">労働契約の合意</h2>
+            <p class="agreement-heading">労働契約の合意</p>
             <p class="agreement-lead">本契約内容を確認のうえ、双方合意した。</p>
             <div class="agreement-grid">
               <div class="agreement-party">
-                <p class="party-title">使用者</p>
-                <p><span class="ph" data-ph="肩書">{{肩書}}</span></p>
-                <p><span class="ph" data-ph="名前">{{名前}}</span></p>
-                <div class="signatory-row"><span class="signatory-cell">印</span></div>
+                <div class="signatory-row">
+                  <span class="signatory-blank" aria-label="署名欄"></span>
+                  <span class="signatory-seal">印</span>
+                </div>
               </div>
               <div class="agreement-party">
-                <p class="party-title">労働者</p>
-                <p><span class="ph" data-ph="労働者合意氏名">{{労働者合意氏名}}</span></p>
-                <div class="signatory-row"><span class="signatory-cell">印</span></div>
+                <div class="signatory-row">
+                  <span class="signatory-blank" aria-label="署名欄"></span>
+                  <span class="signatory-seal">印</span>
+                </div>
               </div>
             </div>
           </section>
@@ -393,5 +496,6 @@
   </main>
 
   <script src="script.js"></script>
+  <script type="module" src="word-export.js"></script>
 </body>
 </html>

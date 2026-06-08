@@ -6,6 +6,39 @@
 
 const EMPTY = "—";
 
+const STORAGE_KEY = "labor-notice-generator-draft";
+const STORAGE_VERSION = 1;
+const SAVE_DEBOUNCE_MS = 500;
+
+const DRAFT_EXTRA_FIELD_IDS = [
+  "break-minutes",
+  "break-start-time",
+  "break-end-time",
+  "commute-expense-desc",
+  "commute-expense-limit",
+];
+const DRAFT_CHECKBOX_IDS = [
+  "use-combined-title",
+  "use-fixed-overtime",
+  "use-probation",
+  "is-part-time",
+];
+
+let saveTimer = null;
+let isRestoringDraft = false;
+let skipSaveOnce = false;
+function isUnderscorePlaceholder(text) {
+  const t = trimValue(text);
+  return t !== "" && /^[＿_－—‐\s]+$/.test(t);
+}
+
+function sanitizeNameField(inputId) {
+  const el = document.getElementById(inputId);
+  if (el && isUnderscorePlaceholder(el.value)) {
+    el.value = "";
+  }
+}
+
 const PLACEHOLDERS = {
   労働者氏名: { inputId: "worker-name", introLabel: "氏名" },
   使用者名称: { inputId: "employer-name", emptyDefault: "" },
@@ -13,25 +46,43 @@ const PLACEHOLDERS = {
   更新上限: { inputId: "renewal-limit", emptyDefault: "" },
   無期転換申込: { inputId: "indefinite-conversion", emptyDefault: "" },
   無期転換後条件: { inputId: "indefinite-conditions", emptyDefault: "" },
+  試用期間: { inputId: "probation-period" },
+  試用期間中の労働条件: {
+    inputId: "probation-conditions",
+    emptyDefault: "本通知書に記載の労働条件と同一とする。",
+  },
+  本採用判断基準: {
+    inputId: "probation-dismissal",
+    emptyDefault:
+      "試用期間中又は試用期間満了時に、勤務成績、業務遂行能力、勤務態度、健康状態その他従業員としての適格性を総合的に勘案し、本採用の可否を判断する。",
+  },
   就業場所: { inputId: "work-location" },
   就業場所変更の範囲: { inputId: "work-location-scope" },
   業務内容: { inputId: "job-duties" },
   業務内容変更の範囲: { inputId: "job-duties-scope" },
+  労働時間制度: { inputId: "work-hours-system", emptyDefault: "" },
   始業時刻: { inputId: "work-start-time", emptyDefault: "" },
   終業時刻: { inputId: "work-end-time", emptyDefault: "" },
   所定労働時間: { inputId: "scheduled-hours" },
-  休憩時間: { inputId: "break-display", emptyDefault: "" },
+  休憩時間: { emptyDefault: "" },
   時間外労働の有無: { inputId: "overtime-policy" },
   休日: { inputId: "holidays" },
   勤務日: { inputId: "work-days" },
   休暇: { inputId: "paid-leave" },
+  月給支給総額: {},
   基本給: { inputId: "base-salary" },
   固定残業代時間: { inputId: "fixed-ot-hours", emptyDefault: "" },
   固定残業代金額: { inputId: "fixed-ot-amount", emptyDefault: "" },
   固定残業代超過: { inputId: "fixed-ot-excess", emptyDefault: "" },
   賃金決定計算支払: { inputId: "wage-method" },
   昇給: { inputId: "salary-increase" },
+  賞与: { inputId: "bonus-policy" },
+  交通費: {},
+  賃金締切日: { inputId: "wage-cutoff-day", emptyDefault: "毎月末日" },
   賃金支払日: { inputId: "payday" },
+  作成年: { inputId: "document-year" },
+  作成月: { inputId: "document-month" },
+  作成日: { inputId: "document-day" },
   退職に関する事項: {
     inputId: "retirement-policy",
     emptyDefault: "退職する１ヶ月前に届け出ること",
@@ -43,9 +94,7 @@ const PLACEHOLDERS = {
   その他明示事項: { inputId: "other-disclosure", emptyDefault: "" },
   特記事項: { inputId: "special-notes", emptyDefault: "なし" },
   事業所名称所在地: { inputId: "employer-address" },
-  肩書: { inputId: "representative-title", emptyDefault: "" },
   名前: { inputId: "representative-name", emptyDefault: "" },
-  労働者合意氏名: { inputId: "worker-agreement-name", emptyDefault: "" },
 };
 
 function trimValue(value) {
@@ -76,6 +125,102 @@ function tableText(value) {
   return value === null ? EMPTY : value;
 }
 
+function normalizeDigits(text) {
+  return trimValue(text)
+    .replace(/[０-９]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
+    })
+    .replace(/[，]/g, ",");
+}
+
+function formatYenComma(text) {
+  const digits = normalizeDigits(text).replace(/[^\d]/g, "");
+  if (digits === "") return null;
+  const n = parseInt(digits, 10);
+  if (isNaN(n)) return trimValue(text);
+  return n.toLocaleString("ja-JP");
+}
+
+/** 支給内容＋上限（円）を通知書用の1行にまとめる */
+function formatCommuteExpenseDisplay() {
+  const desc = trimValue(document.getElementById("commute-expense-desc")?.value);
+  const limitRaw = document.getElementById("commute-expense-limit")?.value ?? "";
+  const limit = formatYenComma(limitRaw);
+  const descPart = desc === "" ? "必要に応じて実費支給" : desc;
+
+  if (limit) {
+    return descPart + "（上限" + limit + "円）";
+  }
+  if (desc === "" && trimValue(limitRaw) === "") {
+    return "必要に応じて実費支給（上限15,000円）";
+  }
+  return descPart;
+}
+
+function migrateCommuteDraftFields(data) {
+  if (!data.fields) return;
+  if (Object.prototype.hasOwnProperty.call(data.fields, "commute-expense-desc")) return;
+
+  const legacy = data.fields["commute-expense-limit"];
+  if (legacy === undefined) {
+    data.fields["commute-expense-desc"] = "必要に応じて実費支給";
+    return;
+  }
+
+  const normalized = normalizeDigits(legacy);
+  const digitsOnly = normalized.replace(/[^0-9]/g, "");
+
+  if (digitsOnly !== "" && normalized.replace(/[0-9,]/g, "") === "") {
+    data.fields["commute-expense-limit"] = digitsOnly;
+    data.fields["commute-expense-desc"] = "必要に応じて実費支給";
+    return;
+  }
+
+  if (digitsOnly !== "") {
+    data.fields["commute-expense-limit"] = digitsOnly;
+    data.fields["commute-expense-desc"] =
+      trimValue(legacy.replace(/[0-9０-９,，\s円￥¥]/g, "").replace(/上限/g, "")) ||
+      "必要に応じて実費支給";
+    return;
+  }
+
+  data.fields["commute-expense-desc"] = legacy;
+  data.fields["commute-expense-limit"] = "";
+}
+
+function parseYenAmount(text) {
+  const digits = trimValue(text).replace(/[^\d]/g, "");
+  if (digits === "") return null;
+  const n = parseInt(digits, 10);
+  return isNaN(n) ? null : n;
+}
+
+/** 基本給＋固定残業代（有効時）＋手当の合計 */
+function computeMonthlyGrossTotal() {
+  let total = 0;
+  let hasAny = false;
+
+  function add(text) {
+    const n = parseYenAmount(text);
+    if (n !== null) {
+      total += n;
+      hasAny = true;
+    }
+  }
+
+  add(document.getElementById("base-salary")?.value);
+
+  if (document.getElementById("use-fixed-overtime")?.checked) {
+    add(document.getElementById("fixed-ot-amount")?.value);
+  }
+
+  document.querySelectorAll("#allowance-rows .allowance-row").forEach(function (row) {
+    add(row.querySelector(".allowance-amount")?.value);
+  });
+
+  return hasAny ? total : null;
+}
+
 function introText(value, introLabel) {
   return value === null ? introLabel : value;
 }
@@ -104,6 +249,48 @@ function formatDurationMinutes(totalMinutes) {
   return hours + "時間" + minutes + "分";
 }
 
+function formatTimeDisplay(text) {
+  const mins = parseTimeToMinutes(text);
+  if (mins === null) return "";
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return h + ":" + String(m).padStart(2, "0");
+}
+
+/** 休憩（分）入力から所定労働時間の計算用分数を取り出す */
+function parseBreakMinutesFromInput(text) {
+  const s = trimValue(text);
+  if (s === "") return 0;
+
+  const minutesMatch = s.match(/^(\d+)\s*分$/);
+  if (minutesMatch) return parseInt(minutesMatch[1], 10);
+
+  const hoursMatch = s.match(/^(\d+)\s*時間(?:\s*(\d+)\s*分)?$/);
+  if (hoursMatch) {
+    const hours = parseInt(hoursMatch[1], 10);
+    const minutes = hoursMatch[2] ? parseInt(hoursMatch[2], 10) : 0;
+    return hours * 60 + minutes;
+  }
+
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+
+  return null;
+}
+
+/** 所定労働時間の計算用（分）。未入力・不正時は null */
+function getBreakMinutesForCalculation() {
+  if (getRadioValue("break-mode") === "range") {
+    const start = parseTimeToMinutes(document.getElementById("break-start-time")?.value);
+    const end = parseTimeToMinutes(document.getElementById("break-end-time")?.value);
+    if (start === null || end === null) return null;
+    let endMinutes = end;
+    if (endMinutes <= start) endMinutes += 24 * 60;
+    return endMinutes - start;
+  }
+
+  return parseBreakMinutesFromInput(document.getElementById("break-minutes")?.value);
+}
+
 function updateScheduledHoursFromTimes() {
   const startEl = document.getElementById("work-start-time");
   const endEl = document.getElementById("work-end-time");
@@ -117,9 +304,8 @@ function updateScheduledHoursFromTimes() {
   let endMinutes = end;
   if (endMinutes <= start) endMinutes += 24 * 60;
 
-  const breakRaw = trimValue(document.getElementById("break-minutes")?.value);
-  const breakMinutes = breakRaw === "" ? 0 : parseInt(breakRaw, 10);
-  if (isNaN(breakMinutes) || breakMinutes < 0) return;
+  const breakMinutes = getBreakMinutesForCalculation();
+  if (breakMinutes === null) return;
 
   const workMinutes = endMinutes - start - breakMinutes;
   if (workMinutes <= 0) {
@@ -130,14 +316,271 @@ function updateScheduledHoursFromTimes() {
   scheduledEl.value = "1日" + formatDurationMinutes(workMinutes);
 }
 
-/** 休憩（分）→ 通知書用の表示欄 */
-function updateBreakDisplay() {
-  const breakInput = document.getElementById("break-minutes");
-  const display = document.getElementById("break-display");
-  if (!breakInput || !display) return;
+/** 休憩 → 通知書用の表示（分 or 時刻帯）。入力内容をそのまま反映 */
+function getBreakDisplayText() {
+  if (getRadioValue("break-mode") === "range") {
+    const startRaw = trimValue(document.getElementById("break-start-time")?.value);
+    const endRaw = trimValue(document.getElementById("break-end-time")?.value);
+    if (startRaw === "" && endRaw === "") return null;
 
-  const raw = trimValue(breakInput.value);
-  display.value = raw === "" ? "" : raw + "分";
+    const startText = formatTimeDisplay(startRaw) || startRaw;
+    const endText = formatTimeDisplay(endRaw) || endRaw;
+    if (startRaw !== "" && endRaw !== "") return startText + "〜" + endText;
+    return startRaw !== "" ? startText : endText;
+  }
+
+  const raw = trimValue(document.getElementById("break-minutes")?.value);
+  if (raw === "") return null;
+  return raw;
+}
+
+function collectAllowanceDraft() {
+  const items = [];
+  document.querySelectorAll("#allowance-rows .allowance-row").forEach(function (row) {
+    items.push({
+      name: row.querySelector(".allowance-name")?.value ?? "",
+      amount: row.querySelector(".allowance-amount")?.value ?? "",
+    });
+  });
+  return items;
+}
+
+function collectDraft() {
+  const fields = {};
+  Object.keys(PLACEHOLDERS).forEach(function (key) {
+    const id = PLACEHOLDERS[key].inputId;
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (!el || el.type === "checkbox" || el.type === "radio") return;
+    fields[id] = el.value;
+  });
+
+  DRAFT_EXTRA_FIELD_IDS.forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) fields[id] = el.value;
+  });
+
+  const checkboxes = {};
+  DRAFT_CHECKBOX_IDS.forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) checkboxes[id] = el.checked;
+  });
+
+  return {
+    version: STORAGE_VERSION,
+    savedAt: new Date().toISOString(),
+    contractType: getRadioValue("contract-type"),
+    breakMode: getRadioValue("break-mode"),
+    checkboxes: checkboxes,
+    fields: fields,
+    allowances: collectAllowanceDraft(),
+  };
+}
+
+function setAllowanceRows(items) {
+  const list = document.getElementById("allowance-rows");
+  if (!list) return;
+
+  list.innerHTML = "";
+  const rows =
+    items && items.length > 0
+      ? items
+      : [
+          { name: "", amount: "" },
+          { name: "", amount: "" },
+        ];
+
+  rows.forEach(function (item) {
+    list.appendChild(createAllowanceRow(item.name || "", item.amount || ""));
+  });
+}
+
+function applyDraft(data) {
+  if (!data || data.version !== STORAGE_VERSION) return false;
+
+  migrateCommuteDraftFields(data);
+
+  if (data.contractType) {
+    const radio = document.querySelector(
+      'input[name="contract-type"][value="' + data.contractType + '"]'
+    );
+    if (radio) radio.checked = true;
+  }
+
+  if (data.breakMode) {
+    const breakRadio = document.querySelector(
+      'input[name="break-mode"][value="' + data.breakMode + '"]'
+    );
+    if (breakRadio) breakRadio.checked = true;
+  }
+
+  if (data.checkboxes) {
+    DRAFT_CHECKBOX_IDS.forEach(function (id) {
+      if (!Object.prototype.hasOwnProperty.call(data.checkboxes, id)) return;
+      const el = document.getElementById(id);
+      if (el) el.checked = !!data.checkboxes[id];
+    });
+  }
+
+  if (data.fields) {
+    Object.keys(data.fields).forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el && el.type !== "checkbox" && el.type !== "radio") {
+        el.value = data.fields[id] ?? "";
+      }
+    });
+  }
+
+  if (data.allowances) {
+    setAllowanceRows(data.allowances);
+  }
+
+  return true;
+}
+
+function formatSavedAt(iso) {
+  if (!iso) return "自動保存しました";
+  const saved = new Date(iso);
+  if (isNaN(saved.getTime())) return "自動保存しました";
+
+  const diff = Date.now() - saved.getTime();
+  if (diff < 60 * 1000) return "たった今自動保存";
+  if (diff < 60 * 60 * 1000) {
+    return Math.floor(diff / (60 * 1000)) + "分前に自動保存";
+  }
+
+  return (
+    saved.toLocaleString("ja-JP", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) + "に自動保存"
+  );
+}
+
+function setDraftStatus(message, className) {
+  const el = document.getElementById("draft-status");
+  if (!el) return;
+  el.textContent = message;
+  el.classList.remove("is-restored", "is-error");
+  if (className) el.classList.add(className);
+}
+
+function persistDraft() {
+  try {
+    const draft = collectDraft();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    setDraftStatus(formatSavedAt(draft.savedAt));
+    return true;
+  } catch (err) {
+    setDraftStatus("自動保存に失敗しました（ブラウザの保存容量等）", "is-error");
+    return false;
+  }
+}
+
+function scheduleSave() {
+  if (isRestoringDraft) return;
+  if (skipSaveOnce) {
+    skipSaveOnce = false;
+    return;
+  }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistDraft, SAVE_DEBOUNCE_MS);
+}
+
+function loadDraftFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+
+    const data = JSON.parse(raw);
+    isRestoringDraft = true;
+    const ok = applyDraft(data);
+    isRestoringDraft = false;
+
+    if (ok) {
+      skipSaveOnce = true;
+      setDraftStatus("前回の入力を復元しました（" + formatSavedAt(data.savedAt) + "）", "is-restored");
+    }
+    return ok;
+  } catch (err) {
+    isRestoringDraft = false;
+    return false;
+  }
+}
+
+function exportDraftFile() {
+  const draft = collectDraft();
+  const blob = new Blob([JSON.stringify(draft, null, 2)], {
+    type: "application/json",
+  });
+  const worker = trimValue(draft.fields["worker-name"]);
+  const date = new Date().toISOString().slice(0, 10);
+  const base = worker ? "労働条件通知書-" + worker + "-" + date : "労働条件通知書-下書き-" + date;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = base + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  persistDraft();
+  setDraftStatus("ファイルに保存しました（" + formatSavedAt(draft.savedAt) + "）");
+}
+
+function initDraftPersistence() {
+  const exportBtn = document.getElementById("export-draft-btn");
+  const importBtn = document.getElementById("import-draft-btn");
+  const importFile = document.getElementById("import-draft-file");
+  const clearBtn = document.getElementById("clear-draft-btn");
+
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportDraftFile);
+  }
+
+  if (importBtn && importFile) {
+    importBtn.addEventListener("click", function () {
+      importFile.click();
+    });
+    importFile.addEventListener("change", function () {
+      const file = importFile.files && importFile.files[0];
+      importFile.value = "";
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const data = JSON.parse(reader.result);
+          isRestoringDraft = true;
+          const ok = applyDraft(data);
+          isRestoringDraft = false;
+          if (!ok) {
+            setDraftStatus("ファイルの形式が正しくありません", "is-error");
+            return;
+          }
+          skipSaveOnce = true;
+          sanitizeNameField("worker-name");
+          initDocumentDateDefaults();
+          applyPlaceholders();
+          persistDraft();
+          setDraftStatus("ファイルから読み込みしました（" + formatSavedAt(data.savedAt) + "）", "is-restored");
+        } catch (err) {
+          isRestoringDraft = false;
+          setDraftStatus("ファイルの読み込みに失敗しました", "is-error");
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      if (!window.confirm("このブラウザに保存した下書きを消去し、ページを初期状態に戻しますか？")) {
+        return;
+      }
+      localStorage.removeItem(STORAGE_KEY);
+      window.location.reload();
+    });
+  }
 }
 
 function createAllowanceRow(name, amount) {
@@ -163,6 +606,7 @@ function createAllowanceRow(name, amount) {
   removeBtn.addEventListener("click", function () {
     row.remove();
     applyPlaceholders();
+    scheduleSave();
   });
 
   row.appendChild(nameInput);
@@ -246,13 +690,8 @@ function syncUiOptions() {
     agreementEl.hidden = !combined;
   }
 
-  const legalCombined = document.getElementById("notice-legal-combined");
-  if (legalCombined) {
-    legalCombined.hidden = !combined;
-  }
-
   const isFixed = getRadioValue("contract-type") === "fixed";
-  document.querySelectorAll(".contract-2024-only").forEach(function (el) {
+  document.querySelectorAll(".contract-2024-only, .contract-fixed-only").forEach(function (el) {
     el.hidden = !isFixed;
   });
 
@@ -266,18 +705,28 @@ function syncUiOptions() {
   const otPreview = document.getElementById("fixed-ot-preview");
   if (otForm) otForm.hidden = !useFixedOt;
   if (otPreview) otPreview.hidden = !useFixedOt;
+
+  const useProbation = document.getElementById("use-probation")?.checked;
+  const probationForm = document.getElementById("probation-form");
+  if (probationForm) probationForm.hidden = !useProbation;
+  document.querySelectorAll(".probation-only").forEach(function (el) {
+    el.hidden = !useProbation;
+  });
+
+  const breakByRange = getRadioValue("break-mode") === "range";
+  const breakMinutesForm = document.getElementById("break-minutes-form");
+  const breakRangeForm = document.getElementById("break-range-form");
+  if (breakMinutesForm) breakMinutesForm.hidden = breakByRange;
+  if (breakRangeForm) breakRangeForm.hidden = !breakByRange;
 }
 
 function collectValues() {
   const values = {};
   Object.keys(PLACEHOLDERS).forEach(function (key) {
-    values[key] = readInput(PLACEHOLDERS[key].inputId);
+    const inputId = PLACEHOLDERS[key].inputId;
+    if (!inputId) return;
+    values[key] = readInput(inputId);
   });
-
-  const now = new Date();
-  values.作成年 = String(now.getFullYear());
-  values.作成月 = String(now.getMonth() + 1);
-  values.作成日 = String(now.getDate());
 
   if (getRadioValue("contract-type") !== "fixed") {
     values.契約期間 = null;
@@ -286,12 +735,23 @@ function collectValues() {
     values.無期転換後条件 = null;
   }
 
+  if (!document.getElementById("use-probation")?.checked) {
+    values.試用期間 = null;
+    values.試用期間中の労働条件 = null;
+    values.本採用判断基準 = null;
+  }
+
+  values.交通費 = formatCommuteExpenseDisplay();
+  values.休憩時間 = getBreakDisplayText();
+
+  const gross = computeMonthlyGrossTotal();
+  values.月給支給総額 = gross === null ? null : formatYenComma(String(gross));
+
   return values;
 }
 
 function applyPlaceholders() {
   updateScheduledHoursFromTimes();
-  updateBreakDisplay();
   syncUiOptions();
 
   const values = collectValues();
@@ -320,12 +780,16 @@ function applyPlaceholders() {
 
   renderAllowancePreview();
 
-  const workerName = trimValue(document.getElementById("worker-name")?.value);
-  const agreeNameEl = document.getElementById("worker-agreement-name");
-  if (agreeNameEl && trimValue(agreeNameEl.value) === "" && workerName !== "") {
-    agreeNameEl.value = workerName;
-    const agreePh = document.querySelector('[data-ph="労働者合意氏名"]');
-    if (agreePh) agreePh.textContent = workerName;
+  const grossDisplay = document.getElementById("monthly-gross-display");
+  if (grossDisplay) {
+    grossDisplay.textContent =
+      values.月給支給総額 === null ? EMPTY : values.月給支給総額;
+  }
+
+  const systemLine = document.getElementById("work-hours-system-line");
+  const systemText = trimValue(values.労働時間制度 ?? "");
+  if (systemLine) {
+    systemLine.hidden = systemText === "";
   }
 
   const contractType = getRadioValue("contract-type");
@@ -343,6 +807,20 @@ function applyPlaceholders() {
       markFixed.textContent = "□";
     }
   }
+
+  scheduleSave();
+}
+
+function initDocumentDateDefaults() {
+  const y = document.getElementById("document-year");
+  const m = document.getElementById("document-month");
+  const d = document.getElementById("document-day");
+  if (!y || !m || !d) return;
+
+  const now = new Date();
+  if (trimValue(y.value) === "") y.value = String(now.getFullYear());
+  if (trimValue(m.value) === "") m.value = String(now.getMonth() + 1);
+  if (trimValue(d.value) === "") d.value = String(now.getDate());
 }
 
 function initAllowances() {
@@ -350,8 +828,7 @@ function initAllowances() {
   const addBtn = document.getElementById("add-allowance-btn");
   if (!list) return;
 
-  list.appendChild(createAllowanceRow("", ""));
-  list.appendChild(createAllowanceRow("", ""));
+  setAllowanceRows(null);
 
   if (addBtn) {
     addBtn.addEventListener("click", function () {
@@ -369,6 +846,10 @@ function init() {
   const printBtn = document.getElementById("print-btn");
 
   initAllowances();
+  loadDraftFromStorage();
+  initDocumentDateDefaults();
+  sanitizeNameField("worker-name");
+  initDraftPersistence();
 
   if (form) {
     form.addEventListener("input", applyPlaceholders);
@@ -400,3 +881,14 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+window.laborNoticeApp = {
+  applyPlaceholders: applyPlaceholders,
+  getDownloadBaseName: function () {
+    const worker = trimValue(document.getElementById("worker-name")?.value);
+    const date = new Date().toISOString().slice(0, 10);
+    return worker
+      ? "労働条件通知書-" + worker + "-" + date
+      : "労働条件通知書-" + date;
+  },
+};
