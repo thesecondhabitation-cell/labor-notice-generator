@@ -367,9 +367,48 @@ textarea {
 
 .allowance-row {
   display: grid;
-  grid-template-columns: 1fr 0.85fr auto;
+  grid-template-columns: 1fr 0.75fr auto auto;
   gap: var(--space-2);
   align-items: end;
+}
+
+.allowance-ot-base-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+}
+
+.allowance-ot-base-label input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.salary-split-panel {
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.salary-split-summary {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+input[readonly] {
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  cursor: default;
+}
+
+input[readonly]:focus {
+  border-bottom-width: 1px;
+  padding-bottom: var(--space-2);
 }
 
 .allowance-row input {

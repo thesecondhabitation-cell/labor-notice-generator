@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <header class="app-header no-print">
@@ -168,6 +168,11 @@
             <input type="text" id="holidays" placeholder="例：土日祝、会社カレンダーによる">
           </div>
           <div class="form-group">
+            <label for="annual-holiday-days">年間休日（日数）</label>
+            <input type="text" id="annual-holiday-days" placeholder="例：120">
+            <p class="form-hint">固定残業代の按分で月平均所定労働時間を算出する際に使用（土日祝・会社休日などの合計）</p>
+          </div>
+          <div class="form-group">
             <label for="work-days"><code>{{勤務日}}</code></label>
             <input type="text" id="work-days" placeholder="例：月〜金">
           </div>
@@ -187,20 +192,55 @@
           <div class="form-group">
             <label for="base-salary"><code>{{基本給}}</code>（月額・円）</label>
             <input type="text" id="base-salary" placeholder="240000">
+            <p class="form-hint">自動按分をオンにすると、ここは計算結果が入ります（編集不可）</p>
           </div>
           <label class="checkbox-inline">
             <input type="checkbox" id="use-fixed-overtime">
             固定残業代を記載する（時間数・金額・超過分を分離）
           </label>
           <div id="fixed-ot-form" class="fixed-ot-form" hidden>
-            <div class="form-row">
+            <div id="use-salary-split-wrap">
+              <label class="checkbox-inline">
+                <input type="checkbox" id="use-salary-split">
+                総支給額から基本給・固定残業代を自動按分する
+              </label>
+            </div>
+            <div id="salary-split-panel" class="salary-split-panel" hidden>
               <div class="form-group">
-                <label for="fixed-ot-amount"><code>{{固定残業代金額}}</code>（円）</label>
-                <input type="text" id="fixed-ot-amount" placeholder="20000">
+                <label for="monthly-gross-split-target">按分対象の月額総支給額（円）</label>
+                <input type="text" id="monthly-gross-split-target" placeholder="例：300000">
+                <p class="form-hint">基本給・固定残業代・手当を合わせた総額を入力します</p>
               </div>
+              <div id="use-computed-monthly-hours-wrap">
+                <label class="checkbox-inline">
+                  <input type="checkbox" id="use-computed-monthly-hours">
+                  年間休日から月平均所定労働時間を自動算出する
+                </label>
+              </div>
+              <div class="form-group">
+                <label for="monthly-scheduled-hours">月平均所定労働時間（時間）</label>
+                <input type="text" id="monthly-scheduled-hours" value="160" placeholder="160">
+                <p id="monthly-hours-manual-hint" class="form-hint">
+                  手入力の場合はここに直接入力。自動算出時は（365 − 年間休日）× 1日の所定労働時間 ÷ 12
+                </p>
+              </div>
+              <label class="checkbox-inline">
+                <input type="checkbox" id="round-base-to-100">
+                基本給を100円単位で切り下げる（差額は固定残業代に加算）
+              </label>
+              <p class="form-hint">
+                計算式：固定残業代 ＝（基本給 ＋ 「基礎」にチェックした手当）÷ 月所定労働時間 × 固定残業時間 × 1.25
+              </p>
+              <p id="salary-split-summary" class="form-hint salary-split-summary" hidden></p>
+            </div>
+            <div class="form-row">
               <div class="form-group">
                 <label for="fixed-ot-hours"><code>{{固定残業代時間}}</code>（時間分）</label>
                 <input type="text" id="fixed-ot-hours" placeholder="10">
+              </div>
+              <div class="form-group">
+                <label for="fixed-ot-amount"><code>{{固定残業代金額}}</code>（円）</label>
+                <input type="text" id="fixed-ot-amount" placeholder="20000">
               </div>
             </div>
             <div class="form-group">
@@ -210,6 +250,9 @@
           </div>
           <div class="form-group allowance-editor">
             <span class="label-text">その他の手当（自由に追加）</span>
+            <p class="form-hint">
+              「基礎」＝割増賃金の計算の基礎に含める手当。名称から自動判定（例：役職手当、職務手当、住宅手当、家族手当、資格手当、調整手当／通勤手当・交通費は除外）
+            </p>
             <div id="allowance-rows" class="allowance-rows"></div>
             <button type="button" id="add-allowance-btn" class="btn-secondary">＋ 手当を追加</button>
           </div>
@@ -241,6 +284,7 @@
           <div class="form-group">
             <label for="payday"><code>{{賃金支払日}}</code></label>
             <input type="text" id="payday" placeholder="例：翌月25日 / 当月25日">
+            <p class="form-hint">通知書には入力した全文がそのまま表示されます（以前の「25」だけの保存データは「翌月25日」などに書き直してください）</p>
           </div>
         </fieldset>
 
@@ -495,7 +539,7 @@
     </section>
   </main>
 
-  <script src="script.js"></script>
-  <script type="module" src="word-export.js"></script>
+  <script src="script.js?v=5"></script>
+  <script type="module" src="word-export.js?v=5"></script>
 </body>
 </html>

@@ -16,17 +16,50 @@ const DRAFT_EXTRA_FIELD_IDS = [
   "break-end-time",
   "commute-expense-desc",
   "commute-expense-limit",
+  "monthly-gross-split-target",
+  "monthly-scheduled-hours",
+  "annual-holiday-days",
 ];
 const DRAFT_CHECKBOX_IDS = [
   "use-combined-title",
   "use-fixed-overtime",
+  "use-salary-split",
+  "use-computed-monthly-hours",
+  "round-base-to-100",
   "use-probation",
   "is-part-time",
 ];
 
+/** 割増賃金の計算の基礎に含める手当（名称一致で自動チェック。必要に応じて編集してください） */
+const OT_BASE_ALLOWANCE_NAMES = [
+  "役職手当",
+  "職務手当",
+  "住宅手当",
+  "家族手当",
+  "資格手当",
+  "調整手当",
+  "職能手当",
+  "役割手当",
+  "勤務地手当",
+  "営業手当",
+];
+
+/** 割増の基礎から除外しやすい手当 */
+const OT_BASE_EXCLUDED_ALLOWANCE_NAMES = [
+  "通勤手当",
+  "交通費",
+  "出張手当",
+  "食事手当",
+  "皆勤手当",
+];
+
+const OT_PREMIUM_RATE = 1.25;
+const DAYS_IN_YEAR = 365;
+
 let saveTimer = null;
 let isRestoringDraft = false;
 let skipSaveOnce = false;
+let isApplyingSalarySplit = false;
 function isUnderscorePlaceholder(text) {
   const t = trimValue(text);
   return t !== "" && /^[＿_－—‐\s]+$/.test(t);
@@ -221,6 +254,307 @@ function computeMonthlyGrossTotal() {
   return hasAny ? total : null;
 }
 
+function parseHoursNumber(text) {
+  const raw = normalizeDigits(text).replace(/[^\d.]/g, "");
+  if (raw === "") return null;
+  const n = parseFloat(raw);
+  return isNaN(n) || n <= 0 ? null : n;
+}
+
+function formatYenPlain(amount) {
+  return Math.round(amount).toLocaleString("ja-JP");
+}
+
+function matchAllowancePreset(name, presets) {
+  const n = trimValue(name);
+  if (n === "") return false;
+  return presets.some(function (preset) {
+    return n === preset || n.includes(preset) || preset.includes(n);
+  });
+}
+
+function suggestAllowanceInOtBase(name) {
+  if (matchAllowancePreset(name, OT_BASE_EXCLUDED_ALLOWANCE_NAMES)) return false;
+  return matchAllowancePreset(name, OT_BASE_ALLOWANCE_NAMES);
+}
+
+function sumAllowancesByOtBase() {
+  let included = 0;
+  let excluded = 0;
+
+  document.querySelectorAll("#allowance-rows .allowance-row").forEach(function (row) {
+    const n = parseYenAmount(row.querySelector(".allowance-amount")?.value);
+    if (n === null) return;
+    if (row.querySelector(".allowance-in-ot-base")?.checked) {
+      included += n;
+    } else {
+      excluded += n;
+    }
+  });
+
+  return { included: included, excluded: excluded };
+}
+
+function formatHoursDisplay(hours) {
+  const rounded = Math.round(hours * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/** 「1日8時間」「1日7時間30分」などから1日の所定労働時間（時間）を取り出す */
+function parseDailyHoursFromScheduledText(text) {
+  const s = trimValue(text);
+  if (s === "") return null;
+
+  let m = s.match(/^1日(\d+)時間(?:(\d+)分?)?$/);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const min = m[2] ? parseInt(m[2], 10) : 0;
+    return h + min / 60;
+  }
+
+  m = s.match(/^(\d+(?:\.\d+)?)\s*時間$/);
+  if (m) return parseFloat(m[1]);
+
+  return null;
+}
+
+/** 1日の所定労働時間（時間）。所定労働時間欄 → 始業・終業・休憩の順で取得 */
+function getDailyWorkHoursForCalculation() {
+  const fromScheduled = parseDailyHoursFromScheduledText(
+    document.getElementById("scheduled-hours")?.value
+  );
+  if (fromScheduled !== null && fromScheduled > 0) return fromScheduled;
+
+  const start = parseTimeToMinutes(document.getElementById("work-start-time")?.value);
+  const end = parseTimeToMinutes(document.getElementById("work-end-time")?.value);
+  if (start === null || end === null) return null;
+
+  let endMinutes = end;
+  if (endMinutes <= start) endMinutes += 24 * 60;
+
+  const breakMinutes = getBreakMinutesForCalculation();
+  if (breakMinutes === null) return null;
+
+  const workMinutes = endMinutes - start - breakMinutes;
+  if (workMinutes <= 0) return null;
+
+  return workMinutes / 60;
+}
+
+/** 年間休日（日）と1日の所定労働時間から月平均所定労働時間を算出 */
+function computeMonthlyScheduledHoursFromAnnualHolidays() {
+  const annualRaw = trimValue(document.getElementById("annual-holiday-days")?.value);
+  if (annualRaw === "") return null;
+
+  const annualHolidays = parseInt(normalizeDigits(annualRaw), 10);
+  if (isNaN(annualHolidays) || annualHolidays < 0 || annualHolidays >= DAYS_IN_YEAR) {
+    return null;
+  }
+
+  const dailyHours = getDailyWorkHoursForCalculation();
+  if (dailyHours === null || dailyHours <= 0) return null;
+
+  const annualWorkDays = DAYS_IN_YEAR - annualHolidays;
+  if (annualWorkDays <= 0) return null;
+
+  const annualWorkHours = dailyHours * annualWorkDays;
+  return Math.round((annualWorkHours / 12) * 10) / 10;
+}
+
+function applyMonthlyHoursFromAnnualHolidays() {
+  const splitActive =
+    document.getElementById("use-fixed-overtime")?.checked &&
+    document.getElementById("use-salary-split")?.checked;
+  const useComputed = document.getElementById("use-computed-monthly-hours")?.checked;
+  const monthlyEl = document.getElementById("monthly-scheduled-hours");
+
+  if (!monthlyEl) return;
+
+  if (!splitActive || !useComputed) {
+    monthlyEl.readOnly = false;
+    return;
+  }
+
+  const computed = computeMonthlyScheduledHoursFromAnnualHolidays();
+  if (computed !== null) {
+    isApplyingSalarySplit = true;
+    monthlyEl.value = formatHoursDisplay(computed);
+    isApplyingSalarySplit = false;
+  }
+  monthlyEl.readOnly = true;
+}
+
+/**
+ * 総支給額 G = 基本給 + 手当 + 固定残業代
+ * 固定残業代 F = (基本給 + 割増基礎手当) / H × T × 1.25
+ */
+function computeSalarySplit() {
+  const gross = parseYenAmount(document.getElementById("monthly-gross-split-target")?.value);
+  let monthlyHours = parseHoursNumber(document.getElementById("monthly-scheduled-hours")?.value);
+  const fixedHours = parseHoursNumber(document.getElementById("fixed-ot-hours")?.value);
+  const useComputedMonthly = document.getElementById("use-computed-monthly-hours")?.checked;
+
+  if (useComputedMonthly && monthlyHours === null) {
+    const derived = computeMonthlyScheduledHoursFromAnnualHolidays();
+    if (derived !== null) monthlyHours = derived;
+  }
+
+  if (gross === null || monthlyHours === null || fixedHours === null) {
+    if (useComputedMonthly && gross !== null && fixedHours !== null) {
+      return { ok: false, reason: "missing_annual_holiday_calc" };
+    }
+    return { ok: false, reason: "incomplete" };
+  }
+
+  const allowances = sumAllowancesByOtBase();
+  const factor = 1 + (fixedHours * OT_PREMIUM_RATE) / monthlyHours;
+  const otBaseTotal = (gross - allowances.excluded) / factor;
+  const fixedOt = Math.round((otBaseTotal / monthlyHours) * fixedHours * OT_PREMIUM_RATE);
+  const base = Math.round(otBaseTotal - allowances.included);
+
+  if (base < 0) {
+    return { ok: false, reason: "negative_base" };
+  }
+
+  let finalBase = base;
+  let finalFixedOt = fixedOt;
+  const roundTo100 = document.getElementById("round-base-to-100")?.checked;
+
+  if (roundTo100) {
+    finalBase = Math.floor(base / 100) * 100;
+    finalFixedOt = gross - finalBase - allowances.included - allowances.excluded;
+    if (finalFixedOt < 0) {
+      return { ok: false, reason: "negative_fixed_ot" };
+    }
+  }
+
+  const recomposed = finalBase + allowances.included + allowances.excluded + finalFixedOt;
+  const hourlyOtBase = otBaseTotal / monthlyHours;
+
+  let monthlyHoursMeta = null;
+  if (useComputedMonthly) {
+    const annualDays = parseInt(
+      normalizeDigits(document.getElementById("annual-holiday-days")?.value ?? ""),
+      10
+    );
+    const dailyHours = getDailyWorkHoursForCalculation();
+    if (!isNaN(annualDays) && dailyHours !== null) {
+      monthlyHoursMeta = {
+        annualHolidays: annualDays,
+        dailyHours: dailyHours,
+        annualWorkDays: DAYS_IN_YEAR - annualDays,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    base: finalBase,
+    fixedOt: finalFixedOt,
+    otBaseTotal: Math.round(otBaseTotal),
+    hourlyOtBase: hourlyOtBase,
+    monthlyHours: monthlyHours,
+    monthlyHoursMeta: monthlyHoursMeta,
+    allowancesIncluded: allowances.included,
+    allowancesExcluded: allowances.excluded,
+    grossTarget: gross,
+    recomposed: recomposed,
+    roundingDiff: gross - recomposed,
+    baseRoundedTo100: roundTo100,
+    baseBeforeRound: roundTo100 ? base : null,
+  };
+}
+
+function applySalarySplit() {
+  const splitEnabled =
+    document.getElementById("use-fixed-overtime")?.checked &&
+    document.getElementById("use-salary-split")?.checked;
+
+  const summaryEl = document.getElementById("salary-split-summary");
+  const baseEl = document.getElementById("base-salary");
+  const fixedAmountEl = document.getElementById("fixed-ot-amount");
+
+  applyMonthlyHoursFromAnnualHolidays();
+
+  if (!splitEnabled) {
+    if (summaryEl) {
+      summaryEl.hidden = true;
+      summaryEl.textContent = "";
+    }
+    if (baseEl) baseEl.readOnly = false;
+    if (fixedAmountEl) fixedAmountEl.readOnly = false;
+    return;
+  }
+
+  if (baseEl) baseEl.readOnly = true;
+  if (fixedAmountEl) fixedAmountEl.readOnly = true;
+
+  const result = computeSalarySplit();
+  if (!result.ok) {
+    if (summaryEl) {
+      summaryEl.hidden = false;
+      if (result.reason === "negative_base") {
+        summaryEl.textContent =
+          "按分できません。割増基礎に含める手当が多すぎるか、総支給額が不足しています。";
+      } else if (result.reason === "negative_fixed_ot") {
+        summaryEl.textContent =
+          "100円単位の切り下げ後、固定残業代がマイナスになります。総支給額または手当を見直してください。";
+      } else if (result.reason === "missing_annual_holiday_calc") {
+        summaryEl.textContent =
+          "年間休日（日数）と1日の所定労働時間（始業・終業または所定労働時間欄）を入力してください。";
+      } else {
+        summaryEl.textContent = "総支給額・月所定労働時間・固定残業時間を入力してください。";
+      }
+    }
+    return;
+  }
+
+  isApplyingSalarySplit = true;
+  if (baseEl) baseEl.value = String(result.base);
+  if (fixedAmountEl) fixedAmountEl.value = String(result.fixedOt);
+  isApplyingSalarySplit = false;
+
+  if (summaryEl) {
+    summaryEl.hidden = false;
+    let msg =
+      "按分結果：基本給 " +
+      formatYenPlain(result.base) +
+      "円／固定残業代 " +
+      formatYenPlain(result.fixedOt) +
+      "円（割増基礎 " +
+      formatYenPlain(result.otBaseTotal) +
+      "円）";
+
+    if (result.monthlyHoursMeta) {
+      msg +=
+        "／月平均所定 " +
+        formatHoursDisplay(result.monthlyHours) +
+        "時間（年間休日" +
+        result.monthlyHoursMeta.annualHolidays +
+        "日・1日" +
+        formatHoursDisplay(result.monthlyHoursMeta.dailyHours) +
+        "h・年間" +
+        result.monthlyHoursMeta.annualWorkDays +
+        "日より算出）";
+    }
+
+    msg +=
+      "／時間単価（割増基礎） " + formatYenPlain(result.hourlyOtBase) + "円";
+
+    if (result.baseRoundedTo100 && result.baseBeforeRound !== null) {
+      msg +=
+        " ※基本給を100円未満切り下げ（" +
+        formatYenPlain(result.baseBeforeRound) +
+        "円→" +
+        formatYenPlain(result.base) +
+        "円、差額は固定残業代に反映）";
+    } else if (result.roundingDiff !== 0) {
+      msg += " ※端数調整により合計との差 " + result.roundingDiff + "円";
+    }
+    summaryEl.textContent = msg;
+  }
+}
+
 function introText(value, introLabel) {
   return value === null ? introLabel : value;
 }
@@ -340,6 +674,7 @@ function collectAllowanceDraft() {
     items.push({
       name: row.querySelector(".allowance-name")?.value ?? "",
       amount: row.querySelector(".allowance-amount")?.value ?? "",
+      inOtBase: !!row.querySelector(".allowance-in-ot-base")?.checked,
     });
   });
   return items;
@@ -391,7 +726,9 @@ function setAllowanceRows(items) {
         ];
 
   rows.forEach(function (item) {
-    list.appendChild(createAllowanceRow(item.name || "", item.amount || ""));
+    const inOtBase =
+      item.inOtBase === undefined ? undefined : !!item.inOtBase;
+    list.appendChild(createAllowanceRow(item.name || "", item.amount || "", inOtBase));
   });
 }
 
@@ -502,6 +839,7 @@ function loadDraftFromStorage() {
     if (ok) {
       skipSaveOnce = true;
       setDraftStatus("前回の入力を復元しました（" + formatSavedAt(data.savedAt) + "）", "is-restored");
+      applyPlaceholders();
     }
     return ok;
   } catch (err) {
@@ -583,14 +921,14 @@ function initDraftPersistence() {
   }
 }
 
-function createAllowanceRow(name, amount) {
+function createAllowanceRow(name, amount, inOtBase) {
   const row = document.createElement("div");
   row.className = "allowance-row";
 
   const nameInput = document.createElement("input");
   nameInput.type = "text";
   nameInput.className = "allowance-name";
-  nameInput.placeholder = "手当名（例：家族手当）";
+  nameInput.placeholder = "手当名（例：役職手当）";
   nameInput.value = name || "";
 
   const amountInput = document.createElement("input");
@@ -598,6 +936,27 @@ function createAllowanceRow(name, amount) {
   amountInput.className = "allowance-amount";
   amountInput.placeholder = "金額（円）";
   amountInput.value = amount || "";
+
+  const otBaseLabel = document.createElement("label");
+  otBaseLabel.className = "allowance-ot-base-label";
+  otBaseLabel.title = "割増賃金の計算の基礎に含める";
+
+  const otBaseInput = document.createElement("input");
+  otBaseInput.type = "checkbox";
+  otBaseInput.className = "allowance-in-ot-base";
+  otBaseInput.checked =
+    inOtBase !== undefined ? inOtBase : suggestAllowanceInOtBase(nameInput.value);
+
+  otBaseLabel.appendChild(otBaseInput);
+  otBaseLabel.appendChild(document.createTextNode("基礎"));
+
+  nameInput.addEventListener("input", function () {
+    otBaseInput.checked = suggestAllowanceInOtBase(nameInput.value);
+    applyPlaceholders();
+  });
+
+  amountInput.addEventListener("input", applyPlaceholders);
+  otBaseInput.addEventListener("change", applyPlaceholders);
 
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
@@ -611,6 +970,7 @@ function createAllowanceRow(name, amount) {
 
   row.appendChild(nameInput);
   row.appendChild(amountInput);
+  row.appendChild(otBaseLabel);
   row.appendChild(removeBtn);
   return row;
 }
@@ -706,6 +1066,23 @@ function syncUiOptions() {
   if (otForm) otForm.hidden = !useFixedOt;
   if (otPreview) otPreview.hidden = !useFixedOt;
 
+  const useSalarySplit = document.getElementById("use-salary-split")?.checked;
+  const splitPanel = document.getElementById("salary-split-panel");
+  if (splitPanel) splitPanel.hidden = !useFixedOt || !useSalarySplit;
+
+  const splitCheckboxWrap = document.getElementById("use-salary-split-wrap");
+  if (splitCheckboxWrap) splitCheckboxWrap.hidden = !useFixedOt;
+
+  const useComputedMonthly = document.getElementById("use-computed-monthly-hours")?.checked;
+  const computedMonthlyWrap = document.getElementById("use-computed-monthly-hours-wrap");
+  if (computedMonthlyWrap) {
+    computedMonthlyWrap.hidden = !useFixedOt || !useSalarySplit;
+  }
+  const monthlyHoursHint = document.getElementById("monthly-hours-manual-hint");
+  if (monthlyHoursHint) {
+    monthlyHoursHint.hidden = useComputedMonthly && useFixedOt && useSalarySplit;
+  }
+
   const useProbation = document.getElementById("use-probation")?.checked;
   const probationForm = document.getElementById("probation-form");
   if (probationForm) probationForm.hidden = !useProbation;
@@ -753,6 +1130,7 @@ function collectValues() {
 function applyPlaceholders() {
   updateScheduledHoursFromTimes();
   syncUiOptions();
+  applySalarySplit();
 
   const values = collectValues();
 
@@ -838,7 +1216,6 @@ function initAllowances() {
     });
   }
 
-  list.addEventListener("input", applyPlaceholders);
 }
 
 function init() {
