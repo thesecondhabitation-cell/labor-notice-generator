@@ -358,6 +358,142 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* ----- Minimum wage check (form only) ----- */
+.min-wage-check-panel select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.min-wage-check-panel select:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.min-wage-check-result {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-border);
+  background: var(--color-bg);
+  font-size: var(--font-size-sm);
+}
+
+.min-wage-check-result--ok {
+  border-left-color: var(--color-success);
+}
+
+.min-wage-check-result--error {
+  border-left-color: var(--color-error);
+}
+
+.min-wage-check-result--incomplete {
+  border-left-color: var(--color-border);
+}
+
+.min-wage-check-summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.min-wage-check-list {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.25rem;
+  color: var(--color-text-secondary);
+}
+
+.min-wage-check-verdict {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
+.min-wage-check-verdict--ok {
+  color: var(--color-success);
+}
+
+.min-wage-check-verdict--error {
+  color: var(--color-error);
+}
+
+.min-wage-check-details {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+}
+
+.min-wage-check-details dt {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.min-wage-check-details dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.min-wage-check-review-warning {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  background: #fff8e6;
+  border: 1px solid #e8d9a8;
+}
+
+.min-wage-check-result--has-review {
+  border-left-color: #b8860b;
+}
+
+.min-wage-check-group {
+  margin-bottom: var(--space-3);
+}
+
+.min-wage-check-group-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.min-wage-check-breakdown {
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+.min-wage-check-breakdown li {
+  margin-bottom: var(--space-1);
+  line-height: 1.55;
+}
+
+.min-wage-check-breakdown--included .min-wage-item-name {
+  font-weight: 500;
+}
+
+.min-wage-check-breakdown--review .min-wage-item-name {
+  font-weight: 500;
+  color: #8a6d00;
+}
+
+.min-wage-item-amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.min-wage-item-reason {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.min-wage-check-shortfall {
+  margin: var(--space-2) 0 0;
+  color: var(--color-error);
+}
+
 .allowance-rows {
   display: flex;
   flex-direction: column;

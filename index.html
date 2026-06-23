@@ -288,6 +288,25 @@
           </div>
         </fieldset>
 
+        <fieldset class="form-section min-wage-check-panel">
+          <legend>最低賃金チェック（入力支援）</legend>
+          <p class="form-hint">
+            入力内容から時給換算し、地域別最低賃金と照合します。通知書には出力されません。
+            基本給と手当欄の名称から自動判定した「対象」手当のみを合算します。交通費・通勤手当は手当欄で除外判定します（交通費の上限欄は通知書用で、チェックには使いません）。固定残業代は別欄から除外します。判定できない手当は「要確認」として表示します。特定最低賃金は未対応です。
+          </p>
+          <div class="form-group">
+            <label for="min-wage-prefecture">最低賃金の地域</label>
+            <select id="min-wage-prefecture"></select>
+            <p class="form-hint">
+              就業場所・事業所所在地から自動推定します（手動選択で上書き）。
+              参照：<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_rousai/rousai_koyou/minimumichiran_r7/" target="_blank" rel="noopener">厚生労働省 令和7年度 地域別最低賃金</a>
+            </p>
+          </div>
+          <div id="min-wage-check-result" class="min-wage-check-result min-wage-check-result--incomplete" aria-live="polite">
+            <p class="min-wage-check-summary">基本給・就業時間・地域を入力すると結果を表示します。</p>
+          </div>
+        </fieldset>
+
         <fieldset class="form-section">
           <legend>5. 退職（必須明示）</legend>
           <div class="form-group">
@@ -539,6 +558,7 @@
     </section>
   </main>
 
+  <script src="minimum-wage.js?v=5"></script>
   <script src="script.js?v=5"></script>
   <script type="module" src="word-export.js?v=5"></script>
 </body>

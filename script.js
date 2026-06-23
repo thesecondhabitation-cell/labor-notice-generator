@@ -19,6 +19,7 @@ const DRAFT_EXTRA_FIELD_IDS = [
   "monthly-gross-split-target",
   "monthly-scheduled-hours",
   "annual-holiday-days",
+  "min-wage-prefecture",
 ];
 const DRAFT_CHECKBOX_IDS = [
   "use-combined-title",
@@ -772,6 +773,11 @@ function applyDraft(data) {
     setAllowanceRows(data.allowances);
   }
 
+  const minWagePref = document.getElementById("min-wage-prefecture");
+  if (minWagePref && trimValue(minWagePref.value) !== "") {
+    minWagePref.dataset.userSelected = "true";
+  }
+
   return true;
 }
 
@@ -1186,6 +1192,10 @@ function applyPlaceholders() {
     }
   }
 
+  if (typeof window.updateMinimumWageCheck === "function") {
+    window.updateMinimumWageCheck();
+  }
+
   scheduleSave();
 }
 
@@ -1223,6 +1233,9 @@ function init() {
   const printBtn = document.getElementById("print-btn");
 
   initAllowances();
+  if (typeof window.initMinimumWageCheck === "function") {
+    window.initMinimumWageCheck();
+  }
   loadDraftFromStorage();
   initDocumentDateDefaults();
   sanitizeNameField("worker-name");
